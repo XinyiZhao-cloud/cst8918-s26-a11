@@ -1,0 +1,7 @@
+{
+  "name": "pull-request",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:XinyiZhao-cloud/cst8918-s26-a11:pull_request",
+  "description": "CST8918 Lab12 - GitHub Actions",
+  "audiences": ["api://AzureADTokenExchange"]
+}

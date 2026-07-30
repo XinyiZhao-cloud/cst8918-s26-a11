@@ -5,7 +5,12 @@ Prof. Robert McKenney
 
 Automated CI/CD for a Terraform configuration that deploys supporting Azure
 infrastructure for a containerized web app on AKS. Three GitHub Actions workflow files cover four automation responsibilities:
+<<<<<<< Updated upstream
 static analysis, integration testing, deployment, and drift detection..
+=======
+static analysis, integration testing, deployment, and drift detection.
+
+>>>>>>> Stashed changes
 
 ---
 
@@ -61,8 +66,10 @@ cst8918-s26-a11
 │   └── tf-backend
 │       └── main.tf
 ├── screenshots
-│   ├── pr-checks.png
-│   └── pr-tf-plan.png
+│   ├── lab11-pr-checks-passed.png
+│   ├── lab11-terraform-plan.png
+│   ├── lab11-terraform-apply.png
+│   └── lab11-azure-net.png
 ├── .editorconfig
 ├── .gitignore
 └── README.md
@@ -179,6 +186,10 @@ Two Azure AD (Entra ID) app registrations / service principals were created:
 >   `repo:XinyiZhao-cloud@255022494/cst8918-s26-a11@1310409084:ref:refs/heads/main`
 > - Production environment:
 >   `repo:XinyiZhao-cloud@255022494/cst8918-s26-a11@1310409084:environment:production`
+<<<<<<< Updated upstream
+=======
+> The repository emitted customized OIDC subjects containing the repository owner and repository IDs. Additional federated credentials matching the exact subjects shown in the failed workflow logs were added for pull-request, main-branch, and production-environment contexts.
+>>>>>>> Stashed changes
 
 Two identities rather than one, following least privilege. The workflows that run on every
 pull request only need to *read* Azure to produce a plan, so they get the reader identity —
@@ -270,6 +281,10 @@ authentication paths and both are needed.
 ```hcl
 terraform {
   required_version = ">= 1.0.0"
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -309,15 +324,19 @@ tenant, subscription, and client ids — and contain no credential except `ARM_A
 
 ### 6.1 Static Code Analysis — `infra-static-tests.yml`
 
-_Reference: [docs/6_1-terraform-static-tests.md](docs/6_1-terraform-static-tests.md)_
-
 - **Trigger:** push to any branch
 - **Working directory:** `./infra/tf-app`
+<<<<<<< Updated upstream
 - **Steps:** `terraform init -backend=false` → `terraform fmt -check -recursive`
   → `terraform validate` → `tfsec`
 - **Notes:** The backend is disabled because static analysis does not need access to
   remote state. `tfsec` produces SARIF output, which is uploaded to GitHub code
   scanning using `github/codeql-action/upload-sarif`.
+=======
+- **Steps:** `terraform init -backend=false` → `terraform fmt -check -recursive` → `terraform validate` → `tfsec`
+- **Notes:** Terraform initialization disables the remote backend because static validation does not require access to the shared state. The tfsec results are uploaded in SARIF format for GitHub code scanning.
+
+>>>>>>> Stashed changes
 
 ### 6.2 Integration Tests — `infra-ci-cd.yml` (plan job)
 
@@ -327,7 +346,11 @@ _Reference: [docs/6_2-terraform-integration.md](docs/6_2-terraform-integration.m
   branches: [main]
 - **What it does:** authenticates to Azure via OIDC, runs `terraform plan`, and posts
   the plan output back to the PR as a comment.
+<<<<<<< Updated upstream
 - **Notes:** ✅
+=======
+- **Notes:** he Reader identity is used during pull-request runs. The workflow was updated to remove the conflicting `ARM_SKIP_PROVIDER_REGISTRATION` setting and uses `resource_provider_registrations = "none"` in the AzureRM provider configuration.
+>>>>>>> Stashed changes
 
 ### 6.3 Deployment — `infra-ci-cd.yml` (apply job)
 
@@ -335,8 +358,13 @@ _Reference: [docs/6_3-terraform-deploy.md](docs/6_3-terraform-deploy.md)_
 
 - **Trigger:** push / merge to `main`
 - **Environment:** `production` (uses the Contributor `AZURE_CLIENT_ID`)
+<<<<<<< Updated upstream
 - **What it does:** `terraform apply -auto-approve` against the deployed infrastructure.
 - **Notes:** The apply job depends on the plan job and runs only on `main` when
+=======
+- **What it does:** `terraform apply -auto-approve` against the deployed infrastructure. 
+- **Notes:**The apply job depends on the plan job and runs only on `main` when
+>>>>>>> Stashed changes
   Terraform returns detailed exit code `2`. The saved plan is downloaded into
   `infra/tf-app` and applied using the Contributor identity after approval of the
   protected `production` environment.
@@ -348,7 +376,12 @@ _Reference: [docs/6_4-terraform-drift.md](docs/6_4-terraform-drift.md)_
 - **Trigger:** nightly schedule (`cron: '41 3 * * *'`) + manual `workflow_dispatch`
 - **What it does:** runs `terraform plan -detailed-exitcode`; opens a GitHub issue when
   drift is detected and closes the open drift issue when the configuration matches.
+<<<<<<< Updated upstream
 - **Notes:** The workflow uses the Reader identity and does not register Azure
+=======
+- **Notes:** The workflow can also be started manually through `workflow_dispatch`. It uses the Reader identity and reports detected drift through a GitHub issue.
+  The workflow uses the Reader identity and does not register Azure
+>>>>>>> Stashed changes
   resource providers. Drift exit code `2` creates or updates a GitHub issue, while
   exit code `0` closes any existing open drift issue.
 
@@ -359,6 +392,11 @@ _Reference: [docs/6_4-terraform-drift.md](docs/6_4-terraform-drift.md)_
 _Reference: [docs/7-add-infra-elements.md](docs/7-add-infra-elements.md)_
 
 Branch: `pr7-infra-elements` → `main`
+<<<<<<< Updated upstream
+=======
+
+Pull request: [PR #9 — Add Virtual Network and Subnet](https://github.com/XinyiZhao-cloud/cst8918-s26-a11/pull/9)
+>>>>>>> Stashed changes
 
 Resources added to `infra/tf-app`:
 
@@ -366,6 +404,7 @@ Resources added to `infra/tf-app`:
 | -------- | ---- | ---- | ---------------------- |
 | Virtual Network | `azurerm_virtual_network` | `dib00016-a12-vnet` | `10.0.0.0/16` |
 | Subnet | `azurerm_subnet` | `dib00016-a12-subnet` | `10.0.1.0/24` |
+<<<<<<< Updated upstream
 Observed results:
 
 1. **Push to `pr7-infra-elements`** → Terraform Static Tests and code scanning passed.
@@ -377,23 +416,45 @@ Observed results:
    `dib00016-a12-subnet` exist in resource group `dib00016-a12-rg`.
 
 _TODO (optional): link to the PR — https://github.com/XinyiZhao-cloud/cst8918-s26-a11/pull/N_
+=======
+
+Observed results:
+
+1. **Push to `pr7-infra-elements`** — The Terraform static-analysis workflow completed successfully.
+2. **Open PR from `pr7-infra-elements` to `main`** — TFLint, Terraform Static Tests, Terraform Plan, and defsec completed successfully. Terraform posted the plan output to the pull request and reported `2 to add, 0 to change, 0 to destroy`.
+3. **Approve and merge into `main`** — The pull request received approval from the other team member and was merged. The Terraform Apply job waited for approval through the protected `production` environment. After the deployment was approved, Terraform successfully created both resources.
+4. **Azure Portal verification** — The deployed Virtual Network and Subnet were verified in the Azure portal.
+>>>>>>> Stashed changes
 
 ---
 
 ## Screenshots (Submission Requirements)
 
-### 1. Pull Request — all checks have passed (expanded)
+### Pull Request Checks
 
-_TODO: save as `screenshots/pr-checks.png`_
+The infrastructure pull request was reviewed and approved by the other team member. All required checks passed before the pull request was merged into `main`.
 
-![Pull request showing all checks have passed, expanded to show each workflow step](screenshots/pr-checks.png)
+![Pull request approval and successful checks](screenshots/lab11-pr-checks-passed.png)
 
-### 2. Pull Request — Terraform Plan output (expanded)
+### Terraform Plan
 
-_TODO: save as `screenshots/pr-tf-plan.png`_
+The Terraform Plan workflow detected the addition of one Azure Virtual Network and one Subnet. The final plan reported two resources to add, with no resources changed or destroyed.
 
-![Pull request showing the expanded results of the Terraform Plan step](screenshots/pr-tf-plan.png)
+![Terraform plan for the virtual network and subnet](screenshots/lab11-terraform-plan.png)
 
+### Terraform Apply
+
+After the pull request was approved and merged into `main`, the production deployment was approved and the Terraform Apply job completed successfully.
+
+![Successful Terraform Apply workflow](screenshots/lab11-terraform-apply.png)
+
+![Successful Terraform Apply workflow](screenshots/lab11-terraform-apply-success.png)
+
+### Azure Deployment
+
+The Azure portal confirms that the Virtual Network and Subnet were successfully deployed.
+
+![Azure Virtual Network and Subnet](screenshots/lab11-azure-net.png)
 ---
 
 ## Division of Work
@@ -419,8 +480,9 @@ that half of the foundation step could not be split. Doc 1 and doc 4 produce no 
 
 ---
 
-## Challenges & Lessons Learned *(optional)*
+## Challenges & Lessons Learned
 
+<<<<<<< Updated upstream
 ## Challenges & Lessons Learned
 
 - The original branch ruleset targeted every branch, which prevented updates to feature
@@ -434,10 +496,21 @@ that half of the foundation step could not be split. Doc 1 and doc 4 produce no 
   additional federated credentials matching the exact token subjects.
 - Artifact actions do not inherit `defaults.run.working-directory`, so the Terraform plan
   artifact required an explicit `infra/tf-app` path.
+=======
+During implementation, the Azure OIDC login initially failed because the federated credential subject did not exactly match the subject emitted by GitHub. We inspected the workflow error, added matching federated credentials for pull-request, main-branch, and production-environment contexts, and reran the workflows successfully.
+
+The Terraform Plan job also initially failed because `ARM_SKIP_PROVIDER_REGISTRATION` conflicted with the AzureRM provider's `resource_provider_registrations` setting. Removing the workflow environment variable resolved the conflict.
+
+TFLint identified a missing Terraform `required_version`, and the Terraform configuration used quoted strings instead of Boolean values for `use_oidc`. Adding `required_version` and changing the values to `true` allowed the static-analysis checks to pass.
+
+Finally, we learned that approvals can become stale when a pull request's merge base changes. Each feature branch was updated with the latest `main`, the checks were allowed to finish, and the other team member then submitted a fresh approval.
+>>>>>>> Stashed changes
 
 ---
 
 ## Cleanup *(optional)*
+
+After the assignment has been graded, the deployed resources can be removed with:
 
 ```sh
 cd infra/tf-app
@@ -447,9 +520,12 @@ cd ../tf-backend
 terraform destroy
 ```
 
+<<<<<<< Updated upstream
 Infrastructure will be destroyed after submission and grading verification to avoid
 removing resources before they can be inspected.
 
+=======
+>>>>>>> Stashed changes
 ---
 
 ## References *(optional)*

@@ -4,9 +4,8 @@ Prof. Robert McKenney
 # Assignment 12: Terraform CI/CD on Azure with GitHub Actions
 
 Automated CI/CD for a Terraform configuration that deploys supporting Azure
-infrastructure for a containerized web app on AKS. Four GitHub Actions workflows
-cover static analysis, integration tests on pull request, deployment on merge to
-`main`, and daily drift detection.
+infrastructure for a containerized web app on AKS. Three GitHub Actions workflow files cover four automation responsibilities:
+static analysis, integration testing, deployment, and drift detection..
 
 ---
 
@@ -170,6 +169,17 @@ Two Azure AD (Entra ID) app registrations / service principals were created:
 | `dib00016-githubactions-r` | Reader | resource group `dib00016-a12-rg` | PR / plan + drift detection workflows |
 | `dib00016-githubactions-rw` | Contributor | resource group `dib00016-a12-rg` | `production` environment deploy job |
 
+> GitHub emitted customized OIDC subjects containing the repository owner ID and
+> repository ID. Azure requires an exact subject match, so additional federated
+> credentials were added without deleting the assignment-provided credentials:
+>
+> - Pull requests:
+>   `repo:XinyiZhao-cloud@255022494/cst8918-s26-a11@1310409084:pull_request`
+> - Main branch:
+>   `repo:XinyiZhao-cloud@255022494/cst8918-s26-a11@1310409084:ref:refs/heads/main`
+> - Production environment:
+>   `repo:XinyiZhao-cloud@255022494/cst8918-s26-a11@1310409084:environment:production`
+
 Two identities rather than one, following least privilege. The workflows that run on every
 pull request only need to *read* Azure to produce a plan, so they get the reader identity —
 meaning a pull request cannot create, modify, or destroy infrastructure no matter what it
@@ -259,6 +269,7 @@ authentication paths and both are needed.
 
 ```hcl
 terraform {
+  required_version = ">= 1.0.0"
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -302,17 +313,21 @@ _Reference: [docs/6_1-terraform-static-tests.md](docs/6_1-terraform-static-tests
 
 - **Trigger:** push to any branch
 - **Working directory:** `./infra/tf-app`
-- **Steps:** `terraform fmt -check` → `terraform init` → `terraform validate` → `checkov`
-- **Notes:** _TODO: anything you had to adjust (checkov soft-fail, SARIF upload, permissions)._
+- **Steps:** `terraform init -backend=false` → `terraform fmt -check -recursive`
+  → `terraform validate` → `tfsec`
+- **Notes:** The backend is disabled because static analysis does not need access to
+  remote state. `tfsec` produces SARIF output, which is uploaded to GitHub code
+  scanning using `github/codeql-action/upload-sarif`.
 
 ### 6.2 Integration Tests — `infra-ci-cd.yml` (plan job)
 
 _Reference: [docs/6_2-terraform-integration.md](docs/6_2-terraform-integration.md)_
 
-- **Trigger:** pull request targeting `main`
+- **Trigger:** pull_request:
+  branches: [main]
 - **What it does:** authenticates to Azure via OIDC, runs `terraform plan`, and posts
   the plan output back to the PR as a comment.
-- **Notes:** _TODO_
+- **Notes:** ✅
 
 ### 6.3 Deployment — `infra-ci-cd.yml` (apply job)
 
@@ -321,7 +336,10 @@ _Reference: [docs/6_3-terraform-deploy.md](docs/6_3-terraform-deploy.md)_
 - **Trigger:** push / merge to `main`
 - **Environment:** `production` (uses the Contributor `AZURE_CLIENT_ID`)
 - **What it does:** `terraform apply -auto-approve` against the deployed infrastructure.
-- **Notes:** _TODO_
+- **Notes:** The apply job depends on the plan job and runs only on `main` when
+  Terraform returns detailed exit code `2`. The saved plan is downloaded into
+  `infra/tf-app` and applied using the Contributor identity after approval of the
+  protected `production` environment.
 
 ### 6.4 Drift Detection — `infra-drift-detection.yml`
 
@@ -330,7 +348,9 @@ _Reference: [docs/6_4-terraform-drift.md](docs/6_4-terraform-drift.md)_
 - **Trigger:** nightly schedule (`cron: '41 3 * * *'`) + manual `workflow_dispatch`
 - **What it does:** runs `terraform plan -detailed-exitcode`; opens a GitHub issue when
   drift is detected and closes the open drift issue when the configuration matches.
-- **Notes:** _TODO: paste a link to a drift issue if you triggered one for testing._
+- **Notes:** The workflow uses the Reader identity and does not register Azure
+  resource providers. Drift exit code `2` creates or updates a GitHub issue, while
+  exit code `0` closes any existing open drift issue.
 
 ---
 
@@ -338,23 +358,23 @@ _Reference: [docs/6_4-terraform-drift.md](docs/6_4-terraform-drift.md)_
 
 _Reference: [docs/7-add-infra-elements.md](docs/7-add-infra-elements.md)_
 
-Branch: `infra-elements` → `main`
+Branch: `pr7-infra-elements` → `main`
 
 Resources added to `infra/tf-app`:
 
 | Resource | Type | Name | Address space / prefix |
 | -------- | ---- | ---- | ---------------------- |
-| Virtual Network | `azurerm_virtual_network` | _TODO_ | _TODO_ |
-| Subnet | `azurerm_subnet` | _TODO_ | _TODO_ |
-
+| Virtual Network | `azurerm_virtual_network` | `dib00016-a12-vnet` | `10.0.0.0/16` |
+| Subnet | `azurerm_subnet` | `dib00016-a12-subnet` | `10.0.1.0/24` |
 Observed results:
 
-1. **Push to `infra-elements`** → _TODO: static analysis workflow result_
-2. **Open PR `infra-elements` → `main`** → _TODO: static analysis + integration test / plan
-   result, plan comment posted on the PR_ 📸 **both submission screenshots are taken here**
-3. **Approve & merge into `main`** → _TODO: deploy workflow result, including the
-   `production` environment approval step_
-4. **Azure Portal verification** → _TODO: confirm the VNet and Subnet exist_
+1. **Push to `pr7-infra-elements`** → Terraform Static Tests and code scanning passed.
+2. **Open PR into `main`** → TFLint and Terraform Plan passed. The plan reported
+   `2 to add, 0 to change, 0 to destroy`, and the plan output was posted to the PR.
+3. **Approve and merge into `main`** → Terraform Apply waited for approval of the
+   `production` environment and then completed successfully.
+4. **Azure Portal verification** → Confirmed that `dib00016-a12-vnet` and
+   `dib00016-a12-subnet` exist in resource group `dib00016-a12-rg`.
 
 _TODO (optional): link to the PR — https://github.com/XinyiZhao-cloud/cst8918-s26-a11/pull/N_
 
@@ -401,9 +421,19 @@ that half of the foundation step could not be split. Doc 1 and doc 4 produce no 
 
 ## Challenges & Lessons Learned *(optional)*
 
-_TODO (optional but good for marks): anything that broke and how you fixed it —
-federated credential subject mismatches, `Error: building AzureRM Client`, checkov
-failures, plan-comment permissions, etc._
+## Challenges & Lessons Learned
+
+- The original branch ruleset targeted every branch, which prevented updates to feature
+  branches. It was corrected to target only `main`.
+- TFLint required an explicit Terraform `required_version`.
+- Quoted OIDC values were corrected from `"true"` to boolean `true`.
+- AzureRM 4.1 rejected simultaneous use of deprecated
+  `ARM_SKIP_PROVIDER_REGISTRATION` and `resource_provider_registrations`; the deprecated
+  environment variable was removed.
+- GitHub emitted customized OIDC subjects containing repository IDs, so Azure required
+  additional federated credentials matching the exact token subjects.
+- Artifact actions do not inherit `defaults.run.working-directory`, so the Terraform plan
+  artifact required an explicit `infra/tf-app` path.
 
 ---
 
@@ -417,7 +447,8 @@ cd ../tf-backend
 terraform destroy
 ```
 
-_TODO: confirm resources were destroyed._
+Infrastructure will be destroyed after submission and grading verification to avoid
+removing resources before they can be inspected.
 
 ---
 
@@ -427,4 +458,4 @@ _TODO: confirm resources were destroyed._
 - [Connect to Azure from GitHub Actions with OIDC](https://learn.microsoft.com/en-ca/azure/developer/github/connect-from-azure?tabs=azure-cli%2Clinux#use-the-azure-login-action-with-openid-connect)
 - [About security hardening with OpenID Connect](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect)
 - [About protected branches](https://docs.github.com/en/github/administering-a-repository/defining-the-mergeability-of-pull-requests/about-protected-branches)
-- [Checkov](https://www.checkov.io/)
+- [tfsec](https://github.com/aquasecurity/tfsec)

@@ -1,0 +1,163 @@
+name: 'Terraform Configuration Drift Detection'
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 3 * * *'
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  ARM_CLIENT_ID: "${{ secrets.AZURE_CLIENT_ID }}"
+  ARM_SUBSCRIPTION_ID: "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+  ARM_TENANT_ID: "${{ secrets.AZURE_TENANT_ID }}"
+  ARM_ACCESS_KEY: "${{ secrets.ARM_ACCESS_KEY }}"
+
+defaults:
+  run:
+    working-directory: ./infra/tf-app
+
+jobs:
+  terraform-plan:
+    name: 'Terraform Plan'
+    runs-on: ubuntu-latest
+    outputs:
+      tfplanExitCode: ${{ steps.tf-plan.outputs.exitcode }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: tf-plan
+        run: |
+          export exitcode=0
+          terraform plan -detailed-exitcode -no-color -out tfplan || export exitcode=$?
+
+          echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+
+          if [ "$exitcode" -eq 1 ]; then
+            echo "Terraform Plan Failed!"
+            exit 1
+          else
+            exit 0
+          fi
+
+      - name: Publish Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-tfplan
+          path: ./infra/tf-app/tfplan
+
+      - name: Create String Output
+        id: tf-plan-string
+        run: |
+          TERRAFORM_PLAN=$(terraform show -no-color tfplan)
+
+          delimiter="$(openssl rand -hex 8)"
+          echo "summary<<${delimiter}" >> "$GITHUB_OUTPUT"
+          echo "## Terraform Plan Output" >> "$GITHUB_OUTPUT"
+          echo "<details><summary>Click to expand</summary>" >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo '```terraform' >> "$GITHUB_OUTPUT"
+          echo "$TERRAFORM_PLAN" >> "$GITHUB_OUTPUT"
+          echo '```' >> "$GITHUB_OUTPUT"
+          echo "</details>" >> "$GITHUB_OUTPUT"
+          echo "${delimiter}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Terraform Plan to Task Summary
+        env:
+          SUMMARY: ${{ steps.tf-plan-string.outputs.summary }}
+        run: |
+          echo "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish Drift Report
+        if: steps.tf-plan.outputs.exitcode == '2'
+        uses: actions/github-script@v7
+        env:
+          SUMMARY: "${{ steps.tf-plan-string.outputs.summary }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = process.env.SUMMARY;
+            const title = 'Terraform Configuration Drift Detected';
+            const creator = 'github-actions[bot]';
+
+            const response = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              creator: creator,
+              per_page: 100
+            });
+
+            const issue = response.data.find(
+              item => item.title === title && !item.pull_request
+            );
+
+            if (issue) {
+              if (issue.body === body) {
+                console.log('Drift detected: matching issue already exists');
+              } else {
+                console.log('Drift detected: updating existing issue');
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: body
+                });
+              }
+            } else {
+              console.log('Drift detected: creating issue');
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body
+              });
+            }
+
+      - name: Close Resolved Drift Issue
+        if: steps.tf-plan.outputs.exitcode == '0'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = 'Terraform Configuration Drift Detected';
+            const creator = 'github-actions[bot]';
+
+            const response = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              creator: creator,
+              per_page: 100
+            });
+
+            const issues = response.data.filter(
+              item => item.title === title && !item.pull_request
+            );
+
+            for (const issue of issues) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+            }
+
+      - name: Error on Drift
+        if: steps.tf-plan.outputs.exitcode == '2'
+        run: exit 1
